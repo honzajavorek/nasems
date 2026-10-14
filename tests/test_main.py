@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 import pytest
+from click.testing import CliRunner
 
 from nasems import __main__ as nasems
 
@@ -272,3 +273,61 @@ def test_credentials_from_op_stale_cache(fake_op, tmp_path, monkeypatch):
 
     assert nasems.credentials_from_op() == ("user", "pw")
     assert nasems.read_op_cache() == ("h1", "home")
+
+
+class FakeClient:
+    def login(self, username, password):
+        pass
+
+    def list_folders(self):
+        return {17: "Trip to the Zoo"}
+
+    def list_photos(self, folder_id):
+        return []
+
+
+@pytest.fixture
+def run_main(monkeypatch):
+    monkeypatch.setattr(nasems, "Client", FakeClient)
+    monkeypatch.setattr(nasems, "get_credentials", lambda use_op: ("user", "pw"))
+    return lambda args, env=None: CliRunner().invoke(nasems.main, args, env=env)
+
+
+def test_main_output_default(run_main, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = run_main([], env={"NASEMS_OUTPUT": None})
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "photos" / "017 Trip to the Zoo").is_dir()
+
+
+def test_main_output_argument(run_main, tmp_path):
+    result = run_main([str(tmp_path / "arg")], env={"NASEMS_OUTPUT": None})
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "arg" / "017 Trip to the Zoo").is_dir()
+
+
+def test_main_output_envvar(run_main, tmp_path):
+    result = run_main([], env={"NASEMS_OUTPUT": str(tmp_path / "env")})
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "env" / "017 Trip to the Zoo").is_dir()
+
+
+def test_main_output_argument_wins_over_envvar(run_main, tmp_path):
+    result = run_main(
+        [str(tmp_path / "arg")], env={"NASEMS_OUTPUT": str(tmp_path / "env")}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "arg").is_dir()
+    assert not (tmp_path / "env").exists()
+
+
+def test_main_output_envvar_expands_home(run_main, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    result = run_main([], env={"NASEMS_OUTPUT": "~/photos"})
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "photos" / "017 Trip to the Zoo").is_dir()

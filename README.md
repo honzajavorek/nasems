@@ -10,7 +10,11 @@ Requires [uv](https://docs.astral.sh/uv/).
 uv run nasems [OUTPUT]
 ```
 
-Photos are saved to `OUTPUT` (default: `photos/`), one subdirectory per gallery folder, e.g. `photos/042 Trip to the Zoo/001_aBcD1234eFgH5678.jpg`.
+Photos are saved to `OUTPUT`, one subdirectory per gallery folder, e.g. `photos/042 Trip to the Zoo/001_aBcD1234eFgH5678.jpg`. If you don't pass `OUTPUT`, the `NASEMS_OUTPUT` environment variable is used, and if that isn't set either, `photos/` in the current directory. To always save photos to the same place, put this to your shell profile:
+
+```
+export NASEMS_OUTPUT="~/Pictures/Kindergarten"
+```
 
 Repeated runs are idempotent: photos already on disk are skipped, so you can run it regularly to fetch only the new ones.
 

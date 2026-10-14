@@ -7,6 +7,7 @@ Credentials are taken from (in this order):
   2. 1Password via the `op` CLI (first login item with the nasems.cz URL)
   3. interactive prompt
 
+Photos are saved to OUTPUT (default: photos), or to NASEMS_OUTPUT if set.
 Repeated runs download only photos which aren't on disk yet.
 """
 
@@ -269,7 +270,9 @@ def download_all(client, downloads, jobs):
 
 
 @click.command(help=__doc__)
-@click.argument("output", default="photos", type=click.Path(path_type=Path))
+@click.argument(
+    "output", envvar="NASEMS_OUTPUT", default="photos", type=click.Path(path_type=Path)
+)
 @click.option(
     "--op/--no-op", "use_op", default=True, help="Get credentials from 1Password."
 )
@@ -290,6 +293,7 @@ def download_all(client, downloads, jobs):
 )
 @click.option("--list", "list_only", is_flag=True, help="Only list the folders.")
 def main(output, use_op, folder_ids, jobs, list_only):
+    output = output.expanduser()
     client = Client()
     client.login(*get_credentials(use_op))
 
