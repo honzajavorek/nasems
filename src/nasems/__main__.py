@@ -1,16 +1,3 @@
-"""Downloads all photo galleries from the Naše MŠ app (nasems.cz) to a directory.
-
-Credentials are taken from (in this order):
-
-\b
-  1. environment variables NASEMS_LOGIN and NASEMS_PASSWORD
-  2. 1Password via the `op` CLI (first login item with the nasems.cz URL)
-  3. interactive prompt
-
-Photos are saved to OUTPUT (default: photos), or to NASEMS_OUTPUT if set.
-Repeated runs download only photos which aren't on disk yet.
-"""
-
 import http.cookiejar
 import json
 import os
@@ -115,7 +102,7 @@ def get_folder_dir(output, folder_id, name):
 
 
 def op(*args):
-    # no stdin, so that op fails instead of asking its own questions
+    """Runs the 1Password CLI without stdin, so it fails instead of asking questions."""
     return subprocess.run(
         ["op", *args],
         check=True,
@@ -269,7 +256,7 @@ def download_all(client, downloads, jobs):
     return failed
 
 
-@click.command(help=__doc__)
+@click.command(help="Downloads all photo galleries from nasems.cz to OUTPUT.")
 @click.argument(
     "output", envvar="NASEMS_OUTPUT", default="photos", type=click.Path(path_type=Path)
 )
