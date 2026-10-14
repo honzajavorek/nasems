@@ -5,9 +5,10 @@ need to be listed anywhere in the repository.
 """
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from nasems.__main__ import GALLERY_URL, Client, get_credentials
 
@@ -16,31 +17,34 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 FOLDER_ID = 17
 
 
-def select_required(soup, selector):
+def select_required(soup: Tag, selector: str) -> list[Tag]:
     if elements := soup.select(selector):
         return elements
     raise ValueError(f"nothing to anonymize at {selector!r}, did the HTML change?")
 
 
-def replace_text(soup, selector, text):
+def replace_text(soup: Tag, selector: str, text: str | Callable[[Tag], str]) -> None:
     for element in select_required(soup, selector):
         element.string = text(element) if callable(text) else text
 
 
-def anonymize_gallery(html):
+def folder_name(element: Tag) -> str:
+    container = element.find_parent(class_="container")
+    if container is None:
+        raise ValueError("folder name outside of a folder, did the HTML change?")
+    return f"Folder {container['id']}"
+
+
+def anonymize_gallery(html: str) -> str:
     soup = BeautifulSoup(html, "html.parser")
     replace_text(soup, ".button_description", "School")
     replace_text(soup, ".personal_icon", "XY")
     replace_text(soup, ".login .value", "username")
-    replace_text(
-        soup,
-        ".fotogalerie_containers .container[id] .left_side",
-        lambda element: f"Folder {element.find_parent(class_='container')['id']}",
-    )
+    replace_text(soup, ".fotogalerie_containers .container[id] .left_side", folder_name)
     return str(soup)
 
 
-def anonymize_folder(html, folder_id):
+def anonymize_folder(html: str, folder_id: int) -> str:
     soup = BeautifulSoup(html, "html.parser")
     replace_text(soup, ".podnadpis .left_side label", f"Folder {folder_id}")
     replace_text(soup, ".podnadpis_1", "Description")
@@ -49,7 +53,7 @@ def anonymize_folder(html, folder_id):
     return str(soup)
 
 
-def main():
+def main() -> None:
     client = Client()
     client.login(*get_credentials(use_op=True))
 

@@ -9,6 +9,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from http.client import HTTPMessage
 from pathlib import Path
 
 import click
@@ -20,26 +21,35 @@ GALLERY_URL = f"{BASE_URL}/prihlaseno/fotogalerie"
 USER_AGENT = "Mozilla/5.0 (nasems-download)"
 
 
+type Credentials = tuple[str, str]
+type Download = tuple[str, Path]  # (url, target path)
+type Response = tuple[str, bytes, HTTPMessage]  # (final url, body, headers)
+
+
 class Client:
-    def __init__(self):
+    def __init__(self) -> None:
         self.cookies = http.cookiejar.CookieJar()
         self.opener = urllib.request.build_opener(
             urllib.request.HTTPCookieProcessor(self.cookies)
         )
         self.opener.addheaders = [("User-Agent", USER_AGENT)]
 
-    def request(self, url, data=None, retries=5):
+    def request(
+        self, url: str, data: dict[str, str | int] | None = None, retries: int = 5
+    ) -> Response:
         body = urllib.parse.urlencode(data).encode() if data is not None else None
-        for attempt in range(retries):
+        for attempt in range(retries - 1):
             try:
-                with self.opener.open(url, body, timeout=120) as response:
-                    return response.geturl(), response.read(), response.headers
+                return self.open(url, body)
             except urllib.error.URLError, TimeoutError, ConnectionError:
-                if attempt == retries - 1:
-                    raise
                 time.sleep(5 * 2**attempt)
+        return self.open(url, body)
 
-    def login(self, username, password):
+    def open(self, url: str, body: bytes | None) -> Response:
+        with self.opener.open(url, body, timeout=120) as response:
+            return response.geturl(), response.read(), response.headers
+
+    def login(self, username: str, password: str) -> None:
         final_url, _, _ = self.request(
             f"{BASE_URL}/", {"login": username, "password": password}
         )
@@ -48,17 +58,18 @@ class Client:
                 "Login failed, check your username and password."
             )
 
-    def list_folders(self):
+    def list_folders(self) -> dict[int, str]:
         _, body, _ = self.request(GALLERY_URL)
         soup = BeautifulSoup(body, "html.parser")
-        return {
-            int(container["id"]): container.select_one(".left_side").get_text(
-                strip=True
+        folders = {}
+        for container in soup.select(".fotogalerie_containers .container[id]"):
+            name = container.select_one(".left_side")
+            folders[int(str(container["id"]))] = (
+                name.get_text(strip=True) if name else ""
             )
-            for container in soup.select(".fotogalerie_containers .container[id]")
-        }
+        return folders
 
-    def list_photos(self, folder_id):
+    def list_photos(self, folder_id: int) -> list[str]:
         _, body, _ = self.request(
             GALLERY_URL,
             {
@@ -70,10 +81,10 @@ class Client:
         )
         fragment = json.loads(body)["result"]
         soup = BeautifulSoup(fragment, "html.parser")
-        urls = [link["href"] for link in soup.select("a.lightbox[href]")]
+        urls = [str(link["href"]) for link in soup.select("a.lightbox[href]")]
         return list(dict.fromkeys(urls))  # deduplicate, keep order
 
-    def download(self, url, target):
+    def download(self, url: str, target: Path) -> None:
         _, body, headers = self.request(url)
         if not headers.get_content_type().startswith("image/"):
             raise RuntimeError("server didn't return an image (session expired?)")
@@ -85,13 +96,13 @@ class Client:
 MAX_NAME_BYTES = 255  # APFS and most other filesystems
 
 
-def safe_name(name, max_bytes=MAX_NAME_BYTES):
+def safe_name(name: str, max_bytes: int = MAX_NAME_BYTES) -> str:
     name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", name).strip(" .")
     name = name.encode()[:max_bytes].decode(errors="ignore").rstrip(" .")
     return name or "untitled"
 
 
-def get_folder_dir(output, folder_id, name):
+def get_folder_dir(output: Path, folder_id: int, name: str) -> Path:
     """Finds the folder's directory by the ID prefix, so that renames don't matter."""
     prefix = f"{folder_id:03d} "
     if output.is_dir():
@@ -101,7 +112,7 @@ def get_folder_dir(output, folder_id, name):
     return output / (prefix + safe_name(name, MAX_NAME_BYTES - len(prefix)))
 
 
-def op(*args):
+def op(*args: str) -> str:
     """Runs the 1Password CLI without stdin, so it fails instead of asking questions."""
     return subprocess.run(
         ["op", *args],
@@ -112,7 +123,7 @@ def op(*args):
     ).stdout
 
 
-def find_op_item():
+def find_op_item() -> tuple[str, str]:
     """Finds the first login item with the nasems.cz URL, account by account."""
     accounts = json.loads(op("account", "list", "--format", "json") or "[]")
     if not accounts:
@@ -143,12 +154,12 @@ def find_op_item():
     raise LookupError("no login item with the nasems.cz URL found")
 
 
-def op_cache_path():
+def op_cache_path() -> Path:
     config_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
     return config_dir / "nasems" / "op.json"
 
 
-def read_op_cache():
+def read_op_cache() -> tuple[str, str] | None:
     try:
         cache = json.loads(op_cache_path().read_text())
         return cache["item_id"], cache["account_id"]
@@ -156,14 +167,14 @@ def read_op_cache():
         return None
 
 
-def write_op_cache(item_id, account_id):
+def write_op_cache(item_id: str, account_id: str) -> None:
     """Remembers only the IDs of the item and its account, never any secrets."""
     path = op_cache_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"item_id": item_id, "account_id": account_id}))
 
 
-def fetch_op_credentials(item_id, account_id):
+def fetch_op_credentials(item_id: str, account_id: str) -> Credentials:
     fields = json.loads(
         op(
             "item",
@@ -182,7 +193,7 @@ def fetch_op_credentials(item_id, account_id):
     return values["username"], values["password"]
 
 
-def credentials_from_op():
+def credentials_from_op() -> Credentials:
     if cached := read_op_cache():
         try:
             return fetch_op_credentials(*cached)
@@ -194,7 +205,7 @@ def credentials_from_op():
     return credentials
 
 
-def get_credentials(use_op):
+def get_credentials(use_op: bool) -> Credentials:
     if os.environ.get("NASEMS_LOGIN") and os.environ.get("NASEMS_PASSWORD"):
         return os.environ["NASEMS_LOGIN"], os.environ["NASEMS_PASSWORD"]
     if use_op:
@@ -211,11 +222,11 @@ def get_credentials(use_op):
     return username, password
 
 
-def photo_id(url):
+def photo_id(url: str) -> str:
     return url.rstrip("/").rsplit("/", 1)[-1]
 
 
-def plan_folder(folder_dir, urls):
+def plan_folder(folder_dir: Path, urls: list[str]) -> list[Download]:
     """Returns (url, target path) of photos from the folder which aren't on disk yet."""
     existing = {path.stem.split("_", 1)[-1] for path in folder_dir.glob("*.jpg")}
     return [
@@ -225,8 +236,10 @@ def plan_folder(folder_dir, urls):
     ]
 
 
-def plan_downloads(client, folders, output):
-    downloads = []
+def plan_downloads(
+    client: Client, folders: dict[int, str], output: Path
+) -> list[Download]:
+    downloads: list[Download] = []
     for folder_id, name in sorted(folders.items()):
         folder_dir = get_folder_dir(output, folder_id, name)
         folder_dir.mkdir(parents=True, exist_ok=True)
@@ -237,7 +250,7 @@ def plan_downloads(client, folders, output):
     return downloads
 
 
-def download_all(client, downloads, jobs):
+def download_all(client: Client, downloads: list[Download], jobs: int) -> int:
     """Downloads photos in parallel, returns the number of failures."""
     failed = 0
     with ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -279,7 +292,9 @@ def download_all(client, downloads, jobs):
     help="Parallel downloads (more overloads the server).",
 )
 @click.option("--list", "list_only", is_flag=True, help="Only list the folders.")
-def main(output, use_op, folder_ids, jobs, list_only):
+def main(
+    output: Path, use_op: bool, folder_ids: tuple[int, ...], jobs: int, list_only: bool
+) -> None:
     output = output.expanduser()
     client = Client()
     client.login(*get_credentials(use_op))

@@ -8,19 +8,19 @@ from tests.download_fixtures import (
 )
 
 
-def test_gallery_fixture_is_anonymized():
+def test_gallery_fixture_is_anonymized() -> None:
     html = (FIXTURES_DIR / "fotogalerie.html").read_text(encoding="utf-8")
 
     assert anonymize_gallery(html) == html
 
 
-def test_folder_fixture_is_anonymized():
+def test_folder_fixture_is_anonymized() -> None:
     html = (FIXTURES_DIR / "fotogalerie_slozka.html").read_text(encoding="utf-8")
 
     assert anonymize_folder(html, FOLDER_ID) == html
 
 
-def test_anonymize_gallery_fails_on_changed_html():
+def test_anonymize_gallery_fails_on_changed_html() -> None:
     html = (FIXTURES_DIR / "fotogalerie.html").read_text(encoding="utf-8")
     html = html.replace("personal_icon", "something_else")
 
@@ -28,6 +28,6 @@ def test_anonymize_gallery_fails_on_changed_html():
         anonymize_gallery(html)
 
 
-def test_anonymize_folder_fails_on_changed_html():
+def test_anonymize_folder_fails_on_changed_html() -> None:
     with pytest.raises(ValueError):
         anonymize_folder("<div>nothing here</div>", FOLDER_ID)
