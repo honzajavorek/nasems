@@ -219,6 +219,11 @@ def test_find_op_item(fake_op):
     assert nasems.find_op_item() == ("h1", "home")
 
 
+def test_find_op_item_no_accounts(fake_op):
+    with pytest.raises(LookupError, match="no accounts"):
+        nasems.find_op_item()
+
+
 def test_find_op_item_stops_at_first_match(fake_op):
     accounts, calls = fake_op
     accounts["home"] = [login_item("h1", "https://nasems.cz")]

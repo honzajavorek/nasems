@@ -114,14 +114,24 @@ def get_folder_dir(output, folder_id, name):
 
 
 def op(*args):
+    # no stdin, so that op fails instead of asking its own questions
     return subprocess.run(
-        ["op", *args], check=True, capture_output=True, text=True
+        ["op", *args],
+        check=True,
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
     ).stdout
 
 
 def find_op_item():
     """Finds the first login item with the nasems.cz URL, account by account."""
-    for account in json.loads(op("account", "list", "--format", "json")):
+    accounts = json.loads(op("account", "list", "--format", "json") or "[]")
+    if not accounts:
+        raise LookupError(
+            "op CLI sees no accounts, is the 1Password desktop app integration on?"
+        )
+    for account in accounts:
         account_id = account["account_uuid"]
         items = json.loads(
             op(

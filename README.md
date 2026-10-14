@@ -22,6 +22,17 @@ Credentials are taken from (in this order):
 2. 1Password via the [`op` CLI](https://developer.1password.com/docs/cli/): your accounts are searched one by one for a login item with the `nasems.cz` URL, and the first match is used (accounts after it aren't touched). The IDs of the item and its account (no secrets) are then remembered in `~/.config/nasems/op.json`, so next time only that account is unlocked,
 3. interactive prompt.
 
+#### 1Password says "No accounts configured" on macOS
+
+Since macOS 27, macOS can block your terminal from reading data of the 1Password app. The `op` CLI then reports no accounts, even though the desktop app has them and its CLI integration is on (<kbd>1Password</kbd> → <kbd>Settings</kbd> → <kbd>Developer</kbd> → <kbd>Integrate with 1Password CLI</kbd>). To allow access:
+
+1. Open <kbd>System Settings</kbd> → <kbd>Privacy & Security</kbd> → <kbd>Files & Folders</kbd>.
+2. Click the app you run `nasems` in, e.g. <kbd>Terminal</kbd>.
+3. Turn on the setting whose name starts with <kbd>Data shared by 1Password</kbd>.
+4. Quit and reopen the terminal app.
+
+If the app or the setting isn't listed, run `op account list` in it, allow access when macOS asks, and check again. See also [1Password docs](https://www.1password.dev/cli/app-integration).
+
 ### Options
 
 - `--list` – only list gallery folders and their IDs
