@@ -55,6 +55,6 @@ uv sync
 uv run pytest
 ```
 
-Tests also run `ruff` lint and format checks. To fix formatting, run `uv run ruff format`.
+Tests also run `ruff` lint and format checks and `mypy` type checks on all code, including `src/`. To fix formatting, run `uv run ruff format`.
 
 Parsing is tested against real HTML saved in `tests/fixtures/`. If nasems.cz changes, re-download the fixtures with `uv run python -m tests.download_fixtures` and fix the tests.
