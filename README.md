@@ -1,4 +1,4 @@
-# nasems
+# Naše MŠ 👧
 
 Downloads photo galleries from [Naše MŠ](https://nasems.cz), an app Czech kindergartens use to communicate with parents. The app lets you download photos only one by one, this tool downloads all of them at once.
 
